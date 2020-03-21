@@ -1,0 +1,643 @@
+function main(){
+  var mainUrl = "https://irkutsk.karnavaltk.ru/category/karnavalnaja-produkcija/kraski-i-karandashi-dlya-litsa/";
+  mainUrl = mainUrl.concat('?showall=yes');
+  var linksCode = getLinksCode(mainUrl,0);
+  var itemsCount = getItemsCount(linksCode,0);
+  var itemsLinks = getItemsUrls(linksCode,itemsCount,0);
+  fillSheetHeaders();
+  var position = getNextFreeCell();
+  var progress = loadProgress(mainUrl);
+  for (var i = progress; i<itemsCount; i++){
+    if (i > (39+progress)){
+      saveProgress(mainUrl, itemsCount, i);
+      break;
+    }
+    position = printItemsFromLink(itemsLinks[i], position) + position;
+    if (i == (itemsCount - 1)){
+      clearProgress();
+    }
+ }
+}
+
+function countProducts(){
+  var catUrl = "https://karnavaltk.ru/category/1-shary-lateksnye/";
+  var subCatLinksCode = getLinksCode(catUrl, 1);
+  var subCatCount = getItemsCount(subCatLinksCode, 1);
+  var subCatLinks = getItemsUrls(subCatLinksCode,subCatCount,1);
+  var totalCount = [];
+  var total2 = 0;
+  var fullLink = 'https://karnavaltk.ru';
+  for (var i = 0; i<subCatCount; i++){
+    var fullLink = 'https://karnavaltk.ru';
+    fullLink = fullLink.concat(subCatLinks[i], '?showall=yes');
+    var linksCode = getLinksCode(fullLink, 0);
+    var itemsCount = getItemsCount(linksCode, 0);
+    //var itemsLinks = getItemsUrls(linksCode,itemsCount, 0);
+    totalCount[i] = itemsCount;
+    total2 = total2 + itemsCount;
+  }
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("S3").activate();
+  var range = sheet.getRange("A1:B100");
+  var cell = range.getCell(1,1);
+  for (var i = 0; i<subCatCount; i++){
+    cell.setValue(subCatLinks[i]);
+    cell = cell.offset(0,1);
+    cell.setValue(totalCount[i]);
+    cell = cell.offset(1,-1);
+  }
+  cell.setValue('Всего = ');
+  cell = cell.offset(0,1);
+  cell.setValue(total2);
+}
+
+function getArtAlias(){
+  var url = "https://irkutsk.karnavaltk.ru/category/shary-v-mini-upakovkakh/";
+  var subCatLinksCode = getLinksCode(url, 1);
+  var subCatCount = getItemsCount(subCatLinksCode, 1);
+  var subCatLinks = getItemsUrls(subCatLinksCode,subCatCount,1);
+  var fullLink = 'https://karnavaltk.ru';
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("S3").activate();
+  var range = sheet.getRange("A1:B100");
+  var cell = range.getCell(1,1);
+  cell.setValue('product_sku');
+  cell = cell.offset(0,1);
+  cell.setValue('alias');
+  cell = cell.offset(0,1);
+  cell.setValue('firstZero');
+  cell = cell.offset(1,-2);
+  for (var i = 0; i<subCatCount; i++){
+    var fullLink = 'https://karnavaltk.ru';
+    fullLink = fullLink.concat(subCatLinks[i], '?showall=yes');
+    var tableCode = getLinksCode(fullLink, 2);
+    var shortItem = getShortItemArr(tableCode);
+    var arrlength = shortItem.length;
+    for (var j = 0; j<arrlength; j++){
+      cell.setValue(shortItem[j][0]);
+      cell = cell.offset(0,1);
+      cell.setValue(shortItem[j][1]);
+      cell = cell.offset(0,1);
+      if (hasFirstZero(shortItem[j][0]) == true){
+        cell.setValue('TRUE');
+      } else {
+        cell.setValue('FALSE');
+      }
+      cell = cell.offset(1,-2);
+    }
+  } 
+}
+
+function getShortItemArr(tableCode){
+  var shortItem = [];
+  var start1 = 0;
+  var end1 = 0;
+  var count = -1;
+  var subTable = '';
+  var alias = '';
+  var startArt = 0;
+  var endT = 0;
+  var subcount = -1;
+  var startT = tableCode.indexOf('<div class="product-item"', 0) + 25;
+  while (startT != 24)
+  {
+    endT = tableCode.indexOf('</table>', startT) + 8;
+    //endT = tableCode.indexOf('</table>', endT) + 8;
+    subTable = tableCode.substring(startT, endT);
+    start1 = subTable.indexOf('<a href="', 0) + 9;
+    end1 = subTable.indexOf('"', start1);
+    alias = subTable.substring(start1, end1);
+    alias = deleteSlashInAlias(alias);
+    start1 = subTable.indexOf('class="amount_th"', end1);
+    subcount = -1;
+    startArt = subTable.indexOf('<td>', start1) + 4;
+    while (startArt != 3){
+      count = count + 1;
+      subcount = subcount + 1;
+      end1 = subTable.indexOf('</td>', startArt);
+      shortItem[count] = [];
+      shortItem[count][0] = subTable.substring(startArt, end1);
+      shortItem[count][1] = alias;
+      if (subcount > 0){
+        shortItem[count][1] = shortItem[count][1].concat('-',subcount);
+      }
+      startArt = subTable.indexOf('<tr', end1) + 3;
+      if (startArt != 2){
+        startArt = subTable.indexOf('<td>', startArt) + 4;
+      } else {
+        startArt = 3;
+      }
+    }
+    startT = tableCode.indexOf('<div class="product-item"', endT) + 25;
+  }
+  return shortItem;
+}
+
+function hasFirstZero(sku){
+  var start = sku.indexOf('0');
+  if (start == 0){
+    return true;
+  }
+    return false;
+}
+
+function saveImage(link) {
+  var img = UrlFetchApp.fetch(link).getBlob();
+  var dir = DriveApp.getFoldersByName("baloons").next();
+  var file = dir.createFile(img);
+}
+
+function saveProgress(link, total, progress){
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("S2").activate();
+  var range = sheet.getRange("A1:C3");
+  var cell = range.getCell(1,1);
+  cell.setValue(link);
+  cell = cell.offset(0,1);
+  cell.setValue(total);
+  cell = cell.offset(0,1);
+  cell.setValue(progress);
+  sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("S1").activate();
+}
+
+function clearProgress(){
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("S2").activate();
+  var range = sheet.getRange("A1:C3");
+  var cell = range.getCell(1,1);
+  cell.setValue("");
+  cell = cell.offset(0,1);
+  cell.setValue("");
+  cell = cell.offset(0,1);
+  cell.setValue("");
+  sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("S1").activate();
+}
+
+function loadProgress(link){
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("S2").activate();
+  var range = sheet.getRange("A1:C3");
+  var cell = range.getCell(1,1);
+  var savedLink = cell.getValue();
+  var result = 0;
+  if (savedLink == link){
+    cell = cell.offset(0,2);
+    result = cell.getValue();
+  }
+  sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("S1").activate();
+  return result;
+}
+
+function getImageCode(itemCode){
+  var start = itemCode.indexOf('<div class="product-cart-main clearfix">')+40;
+  var end = itemCode.indexOf('<span itemprop="name">', start);
+  var imageCode = itemCode.substring(start, end);
+  imageCode = imageCode.trim();
+  return imageCode;
+}
+
+function getImagesCount(imageCode){
+  var start = 0;
+  var start1 = 0;
+  var count = 0;
+  start = imageCode.indexOf('product-core-image', start);
+  if (start == -1){
+    return 0;
+  } else {
+    count = count + 1;
+  }
+  start = 0;
+  start1 = 0;
+  while (start != -1){
+    start1 = imageCode.indexOf('product-image-', start) + 14;
+    if (start1 < start + 14){
+      start = -1;
+    } else {
+      start = start1;
+      count = count + 1;
+    }
+  }
+  return count;
+}
+
+function getImagesLinks(imageCode, imageCount){
+  var links = [];
+  var startP = 0;
+  var startL = 0;
+  var end = 0;
+  var singlelink = '';
+  var header = 'https://irkutsk.karnavaltk.ru';
+  startP = imageCode.indexOf('product-core-image',startL) + 18;
+  startL = imageCode.indexOf('href="',startP)+6;
+  end = imageCode.indexOf('"',startL);
+  singlelink = imageCode.substring(startL, end);
+  links[0] = header.concat(singlelink);
+  for (var i=1; i<imageCount; i++){
+    startP = imageCode.indexOf('product-image-',startL) + 14;
+    startL = imageCode.indexOf('href="',startP)+6;
+    end = imageCode.indexOf('"',startL);
+    singlelink = imageCode.substring(startL, end);
+    links[i] = header.concat(singlelink);
+  }
+  return links; 
+}
+
+function getImagesNames(imagesLinks, imageCount){
+  var start = 0;
+  var start1 = 0;
+  var end = 0;
+  var name = [];
+  for (var i = 0; i<imageCount; i++){
+    start = -1;
+    start1 = 0;
+    end = 0;
+    while (start != 0){
+      start1 = start;
+      start = imagesLinks[i].indexOf('/', start) + 1;
+    }
+    name[i] = imagesLinks[i].substring(start1); 
+  }
+  return name;
+}
+
+function checkFirstDup(imagesNames, imageCount){
+  if (imageCount > 1){
+    if (imagesNames[0] == imagesNames[1]){
+      return true;
+    } else {
+      return false;
+    }
+  } else {
+    return false;
+  }
+}
+
+function deleteFirstDup(imagesNames, imageCount){
+  var newNames = [];
+  for (var i = 1; i<imageCount; i++){
+    newNames[i-1] = imagesNames[i];
+  }
+  return newNames;
+}
+
+function getLinksCode(url, type){
+  var linksCode = UrlFetchApp.fetch(url).getContentText();
+  if (type == 0) {
+    var start = linksCode.indexOf('<h1 class="category-name">')+26;
+    var end = linksCode.indexOf('<script type="text/javascript"', start);
+  } else if (type == 1) {
+    var start = linksCode.indexOf('<h1 class="category-name">')+26;
+    var end = linksCode.indexOf('<div id="product-list">', start);
+  } else if (type == 2) {
+    var start = linksCode.indexOf('class="product-list') + 19;
+    var end = linksCode.indexOf('cat_info_left_block', start);
+  }
+  linksCode = linksCode.substring(start, end);
+  return linksCode;
+}
+
+function getNextFreeCell(){
+  var sheet = SpreadsheetApp.getActiveSheet();
+  var range = sheet.getRange("A1:B15");
+  var cell = range.getCell(2,1);
+  var celltext = cell.getValue();
+  var cellindex = 2;
+  while (celltext != ''){
+    cellindex = cellindex + 1;
+    cell = cell.offset(1,0);
+    celltext = cell.getValue();
+  }
+  return cellindex;
+}
+
+function getItemsCount(linksCode, type){
+  var start = 0;
+  var start1 = 0;
+  var count = 0;
+  if (type == 0){
+    var str = '<div class="product-item"';
+    var int = 25;
+  } else if (type == 1){
+    var str = '<div class="one">';
+    var int = 17;
+  }
+  while (start != -1){
+    start1 = linksCode.indexOf(str, start) + int;
+    if (start1 < start){
+      start = -1;
+    } else {
+      start = start1;
+      count = count + 1;
+    }
+  }
+  return count;
+}
+
+function getItemsUrls(linksCode, itemCount, type){
+  var links = [];
+  var startP = 0;
+  var startL = 0;
+  var end = 0;
+  var singlelink = '';
+  if (type == 0){
+    var str1 = '<div class="product-item"';
+    var int1 = 25;
+    var str2 = '<a href="';
+    var int1 = 9;
+  } else if (type == 1){
+    var str1 = '<div class="one">';
+    var int1 = 17;
+    var str2 = '<a href="';
+    var int2 = 9;
+  }
+  for (var i=0; i<itemCount; i++){
+    startP = linksCode.indexOf(str1,startL) + int1;
+    startL = linksCode.indexOf(str2,startP) + int2;
+    end = linksCode.indexOf('"',startL);
+    singlelink = linksCode.substring(startL, end);
+    links[i] = singlelink;
+  }
+  return links; 
+}
+
+function getItemTable(itemCode, startPos){
+  var itemTable = [];
+  var start = itemCode.indexOf('brief_table__sku">', startPos) + 18;
+  var end = itemCode.indexOf('<', start);
+  for (var i = 0; i<4; i++){
+    itemTable[i] = itemCode.substring(start, end);
+    start = itemCode.indexOf('<td>', end) + 4;
+    end = itemCode.indexOf('</td>', start);
+  }
+  start = itemCode.indexOf('<span class="price">', start) + 20;
+  end = itemCode.indexOf('<span', start);
+  itemTable[4] = itemCode.substring(start, end);
+  return itemTable;
+}
+
+function getStartPosInTable(itemCode, startPos){
+  startPos = itemCode.indexOf('brief_table__sku">', startPos) + 18;
+  return startPos;
+}
+
+function countItemsInTable(itemCode){
+  var start = 0;
+  var start1 = 0;
+  var count = 0;
+  while (start != -1){
+    start1 = itemCode.indexOf('brief_table__sku">', start) + 18;
+    if (start1 < start){
+      start = -1;
+    } else {
+      start = start1;
+      count = count + 1;
+    }
+  }
+  return count;
+}
+
+function setItemCharRegex(){
+  var icr = [];
+  for (var i = 0; i < 6; i++) {
+    icr[i] = [];
+  }
+  icr[0][0] = 'itemprop="name">';
+  icr[0][1] = '</span>';
+  icr[1][0] = 'itemprop="strana">';
+  icr[1][1] = '</span>';
+  icr[2][0] = 'itemprop="brend">';
+  icr[2][1] = '</span>';
+  icr[3][0] = 'itemprop="material">';
+  icr[3][1] = '</span>';
+  icr[4][0] = 'itemprop="forma">';
+  icr[4][1] = '</span>';
+  icr[5][0] = 'itemprop="dop_info">';
+  icr[5][1] = '</span>';
+  return icr;
+}
+
+function getItemDescription(itemUrl){
+  var itemDesc = UrlFetchApp.fetch(itemUrl).getContentText();
+  var start = itemDesc.indexOf('itemprop="description">') + 23;
+  var itemDescR = '';
+  if (start != 22){
+    var end = itemDesc.indexOf('</div>', start);
+    itemDescR = itemDesc.substring(start, end);
+    //var re = new RegExp('</?.*?>');
+    //while (start != -1){
+      //itemDesc = itemDesc.replace(re, '');
+      //start = itemDesc.indexOf('<');
+    //}
+  }
+  return itemDescR;
+}
+
+function getItemCode(itemUrl){
+  var itemCode = UrlFetchApp.fetch(itemUrl).getContentText();
+  var start = itemCode.indexOf('<div class="product-cart-main clearfix">')+40;
+  var end = itemCode.indexOf('</article>', start);
+  var itemCode = itemCode.substring(start, end);
+  itemCode = itemCode.trim();
+  return itemCode;
+}
+
+function convertItemWeight(weight){
+  weight = weight.trim();
+  weight = weight.match(/\d*.?\d*/);
+  return weight;
+}
+
+function addCM(size){
+  size = size.trim();
+  var re1 = new RegExp(' ?см');
+  var end = size.indexOf(re1);
+  if (end = -1){
+    size = size.concat(' см');
+  }
+  return size;
+}
+
+function addST(count){
+  return count.concat(' шт.');
+}
+
+function deleteSlashInAlias(itemAlias){
+  var start = itemAlias.indexOf('/');
+  while (start != -1){
+    itemAlias = itemAlias.replace('/', '');
+    start = itemAlias.indexOf('/');
+  }
+  return itemAlias;
+}
+
+function getItemChars(itemUrl){
+  var itemCode = getItemCode(itemUrl);
+  var icr = setItemCharRegex();
+  var itemCount = countItemsInTable(itemCode);
+  var startPos = 0;
+  var item = [];
+  var singleItem = [];
+  var i = 0;
+  for (i = 0; i < itemCount; i++) {
+    item[i] = [];
+  }
+  item[0][0] = getSingleChar(itemCode, icr[0][0], icr[0][1]); //Get Name
+  for (i = 0; i<4; i++){
+    item[0][i+6] = getSingleChar(itemCode, icr[i+1][0], icr[i+1][1]); //Get common characteristics
+  }
+  item[0][10] = getItemDescription(itemUrl); //Get description
+  for (i = 0; i<itemCount; i++){
+    var singleItem = getItemTable(itemCode, startPos);
+    var startPos = getStartPosInTable(itemCode, startPos);
+    singleItem[1] = convertItemWeight(singleItem[1]);
+    //singleItem[2] = addCM(singleItem[2]);
+    //singleItem[3] = addST(singleItem[3]);
+    for (var j = 0; j < 5; j++){
+      item[i][j+1] = singleItem[j];
+    }
+   item[0][11] = getSingleChar(itemCode, icr[5][0], icr[5][1]);
+  }
+  return item;
+}
+
+function getSingleChar(itemCode, startStr, endStr){
+  var start = itemCode.indexOf(startStr);
+  var itemChar = '';
+  if (start != -1){
+    start = start + startStr.length;
+    var end = itemCode.indexOf(endStr, start);
+    var itemChar = itemCode.substring(start, end);
+  }
+  return itemChar;
+}
+
+function printItemsFromLink(itemUrl, position){ 
+  var header = 'https://irkutsk.karnavaltk.ru';
+  var itemAlias = deleteSlashInAlias(itemUrl);
+  itemUrl = header.concat(itemUrl);
+  var itemCode = getItemCode(itemUrl);
+  var count = countItemsInTable(itemCode);
+  var item = [];
+  var images = [];
+  item = getItemChars(itemUrl);
+  var imageCode = getImageCode(itemCode);
+  var imageCount = getImagesCount(imageCode);
+  var imageLinks = getImagesLinks(imageCode, imageCount);
+  if (checkFirstDup(imageLinks, imageCount) == true) {
+    imageLinks = deleteFirstDup(imageLinks, imageCount);
+    imageCount = imageCount - 1;
+  }
+  var imageNames = getImagesNames(imageLinks, imageCount);  
+  
+  for (var i = 0; i<imageCount; i++){
+    //saveImage(imageLinks[i]);
+  }
+
+  printAllItems(item, position, count, imageNames, imageCount, itemAlias);
+  return (count*imageCount);
+}
+  
+function fillSheetHeaders(){
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("S1").activate();
+  var range = sheet.getRange("A1:B15");
+  var cell = range.getCell(1,1);
+  cell.setValue('product_name');
+  cell = cell.offset(0, 1);
+  cell.setValue('product_sku');
+  cell = cell.offset(0, 1);
+  //cell.setValue('product_weight');
+  //cell = cell.offset(0, 1);
+  cell.setValue('product_price');
+  cell = cell.offset(0, 1);
+  cell.setValue('short_decription');
+  cell = cell.offset(0, 1);
+  cell.setValue('product_description');
+  cell = cell.offset(0, 1);
+  cell.setValue('alias');
+  cell = cell.offset(0, 1);
+  cell.setValue('file_title');
+  cell = cell.offset(0, 1);
+  cell.setValue('file_url');
+  cell = cell.offset(0, 1);
+  cell.setValue('file_url_thumb');
+  cell = cell.offset(0, 1);
+  cell.setValue('published');
+}
+
+function getGroupInfo(firstItem, currentItem){
+  var groupInfo = '';
+  if (currentItem[3] != ''){
+    groupInfo = groupInfo.concat(currentItem[3]);
+    if (currentItem[4] != ''){
+      groupInfo = groupInfo.concat(', ',currentItem[4]);
+      groupInfo = groupInfo.concat(' шт.');
+    }
+  } else {
+    if (currentItem[4] != ''){
+      groupInfo = groupInfo.concat(currentItem[4],' шт.');
+    }
+  }
+  if (firstItem[6] != ''){
+    groupInfo = groupInfo.concat('\r\n','Страна производства: ',firstItem[6]);
+  }
+  if (firstItem[7] != ''){
+    groupInfo = groupInfo.concat('\r\n','Производитель: ',firstItem[7]);
+  }
+  if (firstItem[8] != ''){
+    groupInfo = groupInfo.concat('\r\n','Материал: ',firstItem[8]);
+  }
+  if (firstItem[9] != ''){
+    groupInfo = groupInfo.concat('\r\n','Форма: ',firstItem[9]);
+  }
+  if (firstItem[11] != ''){
+    groupInfo = groupInfo.concat('\r\n','Дополнительная информация: ',firstItem[11]);
+  }
+  return groupInfo;
+}
+
+function printAllItems(item, position, itemCount, imageNames, imageCount, itemAlias){
+  var sheet = SpreadsheetApp.getActiveSheet();
+  var range = sheet.getRange("A1:B400");
+  var cell = range.getCell(position,1);
+  var groupInfo = '';
+  var thumbPre = 'resized/';
+  var i = 0;
+  var j = 0;
+  for (i = 0; i<itemCount; i++){
+    j = 0;
+    var tempItemAlias = itemAlias;
+    if (i > 0){
+        tempItemAlias = itemAlias.concat('-',i);
+    }
+    for (j = 0; j<imageCount; j++){
+      groupInfo = getGroupInfo(item[0],item[i]);      
+      cell.setValue(item[0][0]); // Print name
+      cell = cell.offset(0,1);
+      cell.setValue(item[i][1]); //Print article
+      cell = cell.offset(0,1);
+      //cell.setValue(item[i][2]); //Print weight
+      //cell = cell.offset(0,1);
+      cell.setValue(item[i][5]); //Print price
+      cell = cell.offset(0,1);
+      cell.setValue(groupInfo);
+      cell = cell.offset(0,1);
+      cell.setValue(item[0][10])
+      cell = cell.offset(0,1);
+      cell.setValue(tempItemAlias);
+      cell = cell.offset(0,1);
+      cell.setValue(imageNames[j]);
+      cell = cell.offset(0,1);
+      cell.setValue(imageNames[j]);
+      cell = cell.offset(0,1);
+      cell.setValue(thumbPre.concat(imageNames[j]));
+      cell = cell.offset(0,1);
+      cell.setValue(1);
+      cell = cell.offset(1,-9);
+    }
+  }
+}
+
+function printItem(item, position){
+  var sheet = SpreadsheetApp.getActiveSheet();
+  var range = sheet.getRange("A1:B15");
+  var cell = range.getCell(position,2);
+  for (var i = 0; i<11; i++){
+    cell.setValue(item[i]);
+    cell = cell.offset(0,1);
+  }
+}
