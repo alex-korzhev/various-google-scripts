@@ -1,0 +1,194 @@
+function main(){
+  var ALIGN = initCell(2,1).getValue();
+  var LOOKAHEADVALUE = initCell(2,2).getValue();
+  var SPACEMULTIPLIER = initCell(2,3).getValue();
+  var SPACEBETWEEN = initCell(2,4).getValue();
+  var DELIMETER = initCell(2,5).getValue();
+  var cell = initCell(3, 1);
+  var maxrows = getMaxCell(LOOKAHEADVALUE, true, cell);
+  var maxcolumns = getMaxCell(LOOKAHEADVALUE, false, cell);
+  var cellLengthArray = getCellLengthArray(maxrows, maxcolumns, cell);
+  //print2Array(cellLengthArray, maxrows, maxcolumns);
+  var columnsMaxArray = getMaxLenthByColumns(cellLengthArray, maxrows, maxcolumns);
+  //print1Array(columnsMaxArray, maxcolumns);
+  var textArr = getSpacedArray(maxrows,maxcolumns,
+                               columnsMaxArray,cellLengthArray, ALIGN, SPACEMULTIPLIER);
+  //print2Array(textArr, maxrows, maxcolumns);
+  var collapsedText = collapseTextArr(textArr, 
+                                      maxrows, maxcolumns, SPACEBETWEEN, DELIMETER);
+  printCollapsed(collapsedText, maxrows, maxcolumns);
+}
+
+function say(what){
+  var ui = SpreadsheetApp.getUi();
+  ui.alert(what);
+}
+
+function spc(number, mult){
+  var str = '';
+  var flooreddown = Math.floor(number * mult)
+  for (var i = 0; i<flooreddown;i++)
+    str = str+' ';
+  return str;
+}
+
+function initCell(r, c){
+  var sheet = SpreadsheetApp.getActiveSheet();
+  var range = sheet.getRange("A1:O20");
+  var cell = range.getCell(r,c);
+  return cell;
+}
+
+function getMaxCell(lookahead, isRow, startcell){
+  var cell = startcell;
+  var tempcell;
+  var isEmpty = false;
+  while (isEmpty != true){
+    isEmpty = true;
+    tempcell = cell;
+    for (var i = 0; i<lookahead; i++){      
+      if (isRow){        
+        tempcell = tempcell.offset(1, 0);
+      } else {
+        tempcell = tempcell.offset(0, 1);
+      }
+      if (tempcell.getValue() != ''){        
+        isEmpty = false;
+      }
+    }
+    if (!isEmpty){      
+      if (isRow){        
+        cell = cell.offset(1, 0);
+      } else {
+        cell = cell.offset(0, 1);
+      }
+    } else {
+      if (isRow)
+        return cell.getRow() -2 ;
+      else
+        return cell.getColumn();
+    }
+  }
+}
+
+function print2Array(array, maxr, maxc){
+  var cell = initCell(maxr+1,maxc+1);
+  for (var i = 0; i<maxc; i++){
+    for (var j = 0; j<maxr; j++){
+      cell.setValue(array[i][j]);
+      cell = cell.offset(1,0);
+    }
+    cell = cell.offset(-maxr,1);
+  }
+}
+
+function print1Array(array, maxc){
+  var cell = initCell(10,1);
+  for (var i = 0; i<maxc; i++){
+      cell.setValue(array[i]);
+      cell = cell.offset(0,1);
+  }
+}
+
+function printCollapsed(collapsedText, maxr, maxc){
+  var cell = initCell(maxr + 3, 1);
+  cell.setValue(collapsedText);
+}
+
+function isNumber(value){
+  if(!isNaN(parseFloat(value)) && isFinite(value))
+    return true;
+  else
+    return false;
+}
+function getCellLengthArray(rowcount, colcount,startcell){
+  var cellLength = [];
+  var cell = startcell;
+  var value;
+  for (var i = 0; i < colcount; i++) {
+    cellLength[i] = [];
+  }
+  for (var i = 0; i<colcount; i++){
+    for (var j = 0; j<rowcount; j++){
+      value = cell.getValue();
+      if (value != '')
+        cellLength[i][j] = value.toString().length;
+      else 
+        cellLength[i][j] = 0;
+      cell = cell.offset(1,0);
+    }
+    cell = cell.offset(-rowcount,1);
+  }
+  return cellLength;
+}
+
+function getMaxLenthByColumns(lengtharray, rowc, colc){
+  var maxLength = [];
+  var cMaxLength = 0;
+  for (var i = 0; i < colc; i++){
+    for (var j = 0; j < rowc; j++){
+    if (lengtharray[i][j] > cMaxLength)
+      cMaxLength = lengtharray[i][j];
+    }
+    maxLength[i] = cMaxLength;
+    cMaxLength = 0;
+  }
+  return maxLength;
+}
+
+function getSpacedArray(rowc,colc,maxCArray,cellLArray, ALIGN, SPACEMULTIPLIER){
+  var textArr = [];
+  var value;
+  for (var i = 0; i < colc; i++) {
+    textArr[i] = [];
+  }
+  var cell = initCell(3,1);
+  var spccount;
+  for (var i = 0; i<colc; i++){
+    for (var j = 0; j<rowc; j++){
+      value = cell.getValue().toString();
+      if (i == colc - 1)
+        textArr[i][j] = value
+        else {
+          spccount = maxCArray[i] - cellLArray[i][j];
+          switch (ALIGN)  {
+            case 0:
+              textArr[i][j] = value + spc(spccount, SPACEMULTIPLIER);
+              break;
+            case 1:
+              textArr[i][j] = spc(spccount/2, SPACEMULTIPLIER) +
+                value + spc(spccount/2, SPACEMULTIPLIER);
+              break;
+            case 2:
+              textArr[i][j] = spc(spccount, SPACEMULTIPLIER) + value;
+              break;
+            default:
+              textArr[i][j] = value + spc(spccount, SPACEMULTIPLIER);
+              break;
+          }
+        }
+      cell = cell.offset(1,0);
+    }
+    cell = cell.offset(-rowc,1);
+  }
+  return textArr;
+}
+
+function collapseTextArr(textArr, rowc, colc, SPACEBETWEEN, DELIMETER){
+  //var colDiv = ' | ';
+  //var colDiv = spc(SPACEBETWEEN,1);
+  var colDiv = spc(SPACEBETWEEN/2,1) + DELIMETER + spc(SPACEBETWEEN/2,1);
+  var collapsedText = '';
+  for (var i = 0; i<rowc; i++){
+    for (var j = 0; j<colc; j++){
+      collapsedText = collapsedText + textArr[j][i] + colDiv;
+    }
+    collapsedText = collapsedText + '\n';
+  }
+  return collapsedText;
+}
+
+function resetCONTENTASSIST() { 
+ss_ad = SpreadsheetApp.openById(getfid('adminDATA')); 
+//ss_ad
+} 
